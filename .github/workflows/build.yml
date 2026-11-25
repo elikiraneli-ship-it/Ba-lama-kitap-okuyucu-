@@ -1,0 +1,47 @@
+name: Build APK from Fixed ZIP
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Depoyu İndir
+        uses: actions/checkout@v4
+
+      - name: ZIP Arşivini Aç
+        run: |
+          unzip -o AliHocaBaglamaProject-fixed.zip
+          find . -name "local.properties" -delete
+
+      - name: Java 17 ve Gradle Kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Gradle Kurulumu
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: APK Derle ve Android 16 (v2/v3) İmzala
+        run: |
+          PROJECT_DIR=$(find . -name "settings.gradle" -exec dirname {} \; | head -n 1)
+          cd "$PROJECT_DIR"
+          gradle assembleDebug
+
+          keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias alihoca -storepass 123456 -keypass 123456 -dname "CN=AliHoca, OU=Muzik, O=Baglama, L=Izmir, S=Izmir, C=TR"
+          BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
+          APK_PATH=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
+          $BUILD_TOOLS/zipalign -v 4 "$APK_PATH" aligned.apk
+          $BUILD_TOOLS/apksigner sign --ks release.jks --ks-pass pass:123456 --v2-signing-enabled true --v3-signing-enabled true --out "$GITHUB_WORKSPACE/AliHocaBaglamaKitaplari.apk" aligned.apk
+
+      - name: İmzalı APK Dosyasını Yayınla
+        uses: actions/upload-artifact@v4
+        with:
+          name: AliHocaBaglamaKitaplari-APK
+          path: AliHocaBaglamaKitaplari.apk
